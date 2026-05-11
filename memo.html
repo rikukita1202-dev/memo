@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="メモ帳">
+<meta name="theme-color" content="#0f0f11">
+<title>メモ帳</title>
+
+<!-- PWA Manifest (inline) -->
+<script>
+const manifest = {
+  name: "メモ帳",
+  short_name: "メモ帳",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#0f0f11",
+  theme_color: "#0f0f11",
+  description: "シンプルなメモ帳アプリ",
+  icons: [
+    { src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%230f0f11'/><text x='96' y='130' font-size='110' text-anchor='middle'>📝</text></svg>", sizes: "192x192", type: "image/svg+xml" }
+  ]
+};
+const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+const url = URL.createObjectURL(blob);
+const link = document.createElement('link');
+link.rel = 'manifest';
+link.href = url;
+document.head.appendChild(link);
+</script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #16161a;
+    --surface2: #1e1e23;
+    --border: #252529;
+    --border-hover: #3a3a42;
+    --text: #e8e6e1;
+    --text-muted: #666;
+    --text-dim: #444;
+    --accent: #4a9eff;
+    --accent-dim: #1a3a6a;
+    --delete: #ff5f5f;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', sans-serif;
+    overflow: hidden;
+  }
+
+  #app {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
+
+  /* ── Header ── */
+  header {
+    flex-shrink: 0;
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(15,15,17,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .count { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+
+  /* ── Search ── */
+  .search-wrap {
+    position: relative;
+  }
+  .search-icon {
+    position: absolute; left: 11px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px; color: var(--text-muted);
+    pointer-events: none;
+  }
+  .search-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 9px 32px 9px 32px;
+    color: var(--text);
+    font-size: 15px;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-clear {
+    position: absolute; right: 10px; top: 50%;
+    transform: translateY(-50%);
+    background: none; border: none;
+    color: var(--text-muted); font-size: 18px;
+    cursor: pointer; padding: 0 2px; display: none;
+  }
+
+  /* ── Notes list ── */
+  #list-wrap {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 16px;
+    overscroll-behavior: contain;
+  }
+
+  .empty {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 60px 0 20px;
+  }
+  .empty-icon { font-size: 36px; margin-bottom: 10px; }
+
+  .search-result-count {
+    font-size: 12px; color: var(--text-muted);
+    margin-bottom: 10px; padding: 0 2px;
+  }
+
+  .note-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 13px 14px;
+    margin-bottom: 8px;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+  .note-card:active { border-color: var(--border-hover); }
+
+  .note-text {
+    font-size: 15px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .note-text mark {
+    background: #ffe066;
+    color: #1a1a1a;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
+  .note-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .note-date {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .note-actions { display: flex; gap: 8px; }
+  .icon-btn {
+    background: none; border: none;
+    font-size: 15px; cursor: pointer;
+    padding: 3px 5px;
+    opacity: 0.45;
+    border-radius: 5px;
+    transition: opacity 0.15s, background 0.15s;
+  }
+  .icon-btn:active { opacity: 1; background: var(--surface2); }
+
+  /* ── Edit mode ── */
+  .edit-textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.65;
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    margin-bottom: 8px;
+  }
+  .edit-btns { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn {
+    border: none; border-radius: 7px;
+    padding: 7px 16px;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn-cancel { background: var(--surface2); color: var(--text-muted); }
+  .btn-save { background: var(--accent); color: #fff; }
+
+  /* ── FAB (Add button) ── */
+  #fab {
+    position: fixed;
+    right: 20px;
+    bottom: calc(20px + var(--safe-bottom));
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 28px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(74,158,255,0.4);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s, box-shadow 0.15s;
+    z-index: 50;
+  }
+  #fab:active { transform: scale(0.92); box-shadow: 0 2px 10px rgba(74,158,255,0.3); }
+
+  /* ── Bottom sheet (add note) ── */
+  .sheet-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 60;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .sheet-overlay.open { display: flex; align-items: flex-end; }
+  .sheet-overlay.visible { opacity: 1; }
+
+  .sheet {
+    width: 100%;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    padding: 0 16px calc(16px + var(--safe-bottom));
+    transform: translateY(100%);
+    transition: transform 0.28s cubic-bezier(0.32,0.72,0,1);
+  }
+  .sheet-overlay.visible .sheet { transform: translateY(0); }
+
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--border-hover);
+    border-radius: 2px;
+    margin: 12px auto 16px;
+  }
+  .sheet-title {
+    font-size: 14px; font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    letter-spacing: 0.02em;
+  }
+  .sheet-textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.65;
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    margin-bottom: 12px;
+    transition: border-color 0.15s;
+  }
+  .sheet-textarea:focus { border-color: var(--accent); }
+
+  .sheet-footer { display: flex; justify-content: flex-end; }
+  .sheet-save {
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 10px;
+    padding: 11px 28px;
+    font-size: 15px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  .sheet-save:disabled { background: var(--surface2); color: var(--text-dim); }
+  .sheet-save:not(:disabled):active { opacity: 0.8; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: calc(90px + var(--safe-bottom));
+    left: 50%; transform: translateX(-50%) translateY(10px);
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border-hover);
+    border-radius: 10px;
+    padding: 9px 18px;
+    font-size: 13px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    z-index: 200;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="header-top">
+      <h1>📝 メモ帳</h1>
+      <span class="count" id="count">0件</span>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="search" type="search" placeholder="メモを検索..." autocomplete="off" autocorrect="off">
+      <button class="search-clear" id="search-clear">×</button>
+    </div>
+  </header>
+
+  <div id="list-wrap">
+    <div id="search-count" class="search-result-count" style="display:none"></div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<button id="fab" aria-label="メモを追加">＋</button>
+
+<!-- Bottom sheet -->
+<div class="sheet-overlay" id="overlay">
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">新しいメモ</div>
+    <textarea class="sheet-textarea" id="new-text" rows="5" placeholder="ここにメモを入力..."></textarea>
+    <div class="sheet-footer">
+      <button class="sheet-save" id="save-btn" disabled>保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'memo_notes_v1';
+let notes = [];
+let query = '';
+
+// ── Storage ──
+function loadNotes() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    notes = raw ? JSON.parse(raw) : [];
+  } catch { notes = []; }
+}
+function saveNotes() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(notes)); } catch {}
+}
+
+// ── Date format ──
+function fmtDate(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'たった今';
+  if (diffMin < 60) return `${diffMin}分前`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}時間前`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return `${diffD}日前`;
+  return d.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+}
+
+// ── Highlight ──
+function hl(text, q) {
+  if (!q) return escHtml(text);
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escHtml(text).replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
+}
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Render ──
+function render() {
+  const listEl = document.getElementById('list');
+  const countEl = document.getElementById('count');
+  const scEl = document.getElementById('search-count');
+
+  countEl.textContent = `${notes.length}件`;
+
+  const q = query.trim().toLowerCase();
+  const filtered = q ? notes.filter(n => n.text.toLowerCase().includes(q)) : notes;
+
+  if (q) {
+    scEl.style.display = 'block';
+    scEl.textContent = `「${query}」の検索結果：${filtered.length}件`;
+  } else {
+    scEl.style.display = 'none';
+  }
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<div class="empty"><div class="empty-icon">${q ? '🔍' : '📋'}</div>${q ? '該当するメモが見つかりません' : 'まだメモがありません<br><small style="color:#555;font-size:12px;margin-top:6px;display:block">＋ボタンでメモを追加</small>'}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(note => `
+    <div class="note-card" data-id="${note.id}">
+      <div class="note-text" id="text-${note.id}">${hl(note.text, query.trim())}</div>
+      <div class="note-footer">
+        <span class="note-date">${fmtDate(note.updatedAt || note.createdAt)}${note.updatedAt ? ' · 編集済' : ''}</span>
+        <div class="note-actions">
+          <button class="icon-btn" onclick="startEdit(${note.id})" aria-label="編集">✏️</button>
+          <button class="icon-btn" onclick="deleteNote(${note.id})" aria-label="削除">🗑️</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Add ──
+function addNote(text) {
+  const note = { id: Date.now(), text: text.trim(), createdAt: new Date().toISOString() };
+  notes.unshift(note);
+  saveNotes();
+  render();
+  toast('メモを保存しました ✓');
+}
+
+// ── Delete ──
+function deleteNote(id) {
+  if (!confirm('このメモを削除しますか？')) return;
+  notes = notes.filter(n => n.id !== id);
+  saveNotes();
+  render();
+  toast('削除しました');
+}
+
+// ── Edit ──
+function startEdit(id) {
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+  const card = document.querySelector(`[data-id="${id}"]`);
+  card.innerHTML = `
+    <textarea class="edit-textarea" id="edit-${id}" rows="4">${note.text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+    <div class="edit-btns">
+      <button class="btn btn-cancel" onclick="render()">キャンセル</button>
+      <button class="btn btn-save" onclick="saveEdit(${id})">保存</button>
+    </div>
+  `;
+  const ta = document.getElementById(`edit-${id}`);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  // auto-resize
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+function saveEdit(id) {
+  const ta = document.getElementById(`edit-${id}`);
+  if (!ta || !ta.value.trim()) return;
+  notes = notes.map(n => n.id === id ? { ...n, text: ta.value.trim(), updatedAt: new Date().toISOString() } : n);
+  saveNotes();
+  render();
+  toast('更新しました ✓');
+}
+
+// ── Sheet ──
+const overlay = document.getElementById('overlay');
+const newText = document.getElementById('new-text');
+const saveBtn = document.getElementById('save-btn');
+
+document.getElementById('fab').addEventListener('click', () => {
+  overlay.classList.add('open');
+  requestAnimationFrame(() => overlay.classList.add('visible'));
+  setTimeout(() => newText.focus(), 100);
+});
+
+function closeSheet() {
+  overlay.classList.remove('visible');
+  setTimeout(() => { overlay.classList.remove('open'); newText.value = ''; saveBtn.disabled = true; }, 280);
+}
+
+overlay.addEventListener('click', e => { if (e.target === overlay) closeSheet(); });
+
+newText.addEventListener('input', () => {
+  saveBtn.disabled = !newText.value.trim();
+});
+newText.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (newText.value.trim()) { addNote(newText.value); closeSheet(); }
+  }
+});
+
+saveBtn.addEventListener('click', () => {
+  if (newText.value.trim()) { addNote(newText.value); closeSheet(); }
+});
+
+// ── Search ──
+const searchInput = document.getElementById('search');
+const searchClear = document.getElementById('search-clear');
+searchInput.addEventListener('input', () => {
+  query = searchInput.value;
+  searchClear.style.display = query ? 'block' : 'none';
+  render();
+});
+searchClear.addEventListener('click', () => {
+  query = ''; searchInput.value = '';
+  searchClear.style.display = 'none';
+  render(); searchInput.focus();
+});
+
+// ── Toast ──
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ── Service Worker (offline support) ──
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'memo-v1';
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/'])));
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+    });
+  `;
+  const swBlob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swUrl).catch(() => {});
+}
+
+// ── Init ──
+loadNotes();
+render();
+</script>
+</body>
+</html>
